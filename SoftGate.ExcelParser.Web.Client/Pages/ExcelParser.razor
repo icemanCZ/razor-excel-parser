@@ -1,0 +1,86 @@
+﻿@page "/"
+@using SoftGate.ExcelParser.Core.Services
+@using System.Text
+@using System.Text.Json
+@inject IJSRuntime JS
+@inject ExcelParserService ExcelParserService
+@inject DataAgregatorService DataAgregatorService
+
+<PageTitle>Excel parser</PageTitle>
+
+<script>
+    window.downloadFileFromStream = async (fileName, contentStreamReference) => {
+    const arrayBuffer = await contentStreamReference.arrayBuffer();
+    const blob = new Blob([arrayBuffer]);
+    const url = URL.createObjectURL(blob);
+    const anchorElement = document.createElement('a');
+    anchorElement.href = url;
+    anchorElement.download = fileName ?? '';
+    anchorElement.click();
+    anchorElement.remove();
+    URL.revokeObjectURL(url);
+    }
+</script>
+
+<h1>Excel parser</h1>
+
+<InputFile OnChange="FileChangedAsync" disabled="@_isConverting" accept=".xlsx" />
+@if (_fileBytes != null)
+{
+    <button class="btn btn-primary" @onclick="DownloadJsonAsync">Stáhnout JSON</button>
+}
+<p>@_convertStatus</p>
+
+@code {
+    private byte[] _fileBytes;
+    private string _fileName;
+    private string _convertStatus;
+    private bool _isConverting;
+
+    private async Task FileChangedAsync(InputFileChangeEventArgs e)
+    {
+        _fileBytes = null;
+        _fileName = null;
+
+        if (e.File != null)
+        {
+            _convertStatus = "Nahrávám soubor...";
+            _isConverting = true;
+            StateHasChanged();
+            try
+            {
+                using (var ms = new MemoryStream())
+                {
+                    await e.File.OpenReadStream().CopyToAsync(ms);
+                    _convertStatus = "Připravuji JSON...";
+                    StateHasChanged();
+                    _fileName = e.File.Name.Substring(0, e.File.Name.LastIndexOf('.')) + ".json";
+                    await Task.Factory.StartNew(() =>
+                    {
+                        var excelRows = ExcelParserService.Parse(ms.ToArray());
+                        var aggregatedData = DataAgregatorService.AgregateByCustomer(excelRows).ToList();
+                        _fileBytes = Encoding.Default.GetBytes(JsonSerializer.Serialize(aggregatedData));
+                        _convertStatus = "";
+
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _convertStatus = $"Chyba: {ex.Message}";
+                _fileBytes = null;
+                _fileName = null;
+            }
+        }
+        _isConverting = false;
+    }
+
+    private async Task DownloadJsonAsync()
+    {
+        using (var stream = new MemoryStream(_fileBytes))
+        using (var streamRef = new DotNetStreamReference(stream))
+        {
+            await JS.InvokeVoidAsync("downloadFileFromStream", _fileName, streamRef);
+        }
+    }
+}

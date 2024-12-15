@@ -1,0 +1,17 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Excel parser";
+}
+
+<div>
+    <h1>Excel parser</h1>
+
+    <form method="post" enctype="multipart/form-data">
+        <div>
+            <input type="file" asp-for="Upload" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            <input type="submit" value="Stáhnout JSON" />
+        </div>
+        <p class="text-danger">@ViewData["ConvertError"]</p>
+    </form>
+</div>
